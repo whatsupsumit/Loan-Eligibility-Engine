@@ -1,0 +1,193 @@
+{
+  "name": "Workflow B - User-Loan Matching",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "user-matching",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "user-matching"
+    },
+    {
+      "parameters": {
+        "url": "http://django:8000/api/users/",
+        "options": {}
+      },
+      "id": "fetch-users",
+      "name": "Fetch All Users",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://django:8000/api/products/",
+        "options": {}
+      },
+      "id": "fetch-products",
+      "name": "Fetch Loan Products",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Multi-stage Optimization Pipeline for User-Loan Matching\n * \n * Stage 1: SQL-like Pre-filtering (Fast)\n * Stage 2: Advanced Rule-based Matching (Medium)\n * Stage 3: LLM Qualitative Check (Slow, only for edge cases)\n * \n * This approach reduces API calls and processing time significantly.\n */\n\nconst users = $input.first().json;\nconst products = $input.last().json;\n\nconst matches = [];\n\n// STAGE 1: Fast Pre-filtering (SQL-like logic)\nfunction passesBasicCriteria(user, product) {\n  // Hard filters - immediate disqualification\n  if (user.monthly_income < product.min_income) return false;\n  if (user.credit_score < product.min_credit_score) return false;\n  if (user.credit_score > product.max_credit_score) return false;\n  if (user.age < product.min_age) return false;\n  if (user.age > product.max_age) return false;\n  \n  return true;\n}\n\n// STAGE 2: Calculate match score based on multiple factors\nfunction calculateMatchScore(user, product) {\n  let score = 100;\n  \n  // Credit score proximity to optimal range\n  const optimalCredit = (product.min_credit_score + product.max_credit_score) / 2;\n  const creditDiff = Math.abs(user.credit_score - optimalCredit);\n  score -= Math.min(creditDiff / 10, 20); // Max penalty: 20 points\n  \n  // Income surplus (how much over minimum)\n  const incomeSurplus = (user.monthly_income - product.min_income) / product.min_income;\n  if (incomeSurplus > 0.5) {\n    score += 10; // Bonus for 50%+ surplus income\n  } else if (incomeSurplus < 0.1) {\n    score -= 10; // Penalty for just barely meeting requirement\n  }\n  \n  // Employment status matching\n  if (product.employment_required && product.employment_required !== 'Any') {\n    const requiredTypes = product.employment_required.split(',');\n    const matches = requiredTypes.some(type => \n      user.employment_status.toLowerCase().includes(type.toLowerCase().trim())\n    );\n    if (!matches) {\n      score -= 15;\n    }\n  }\n  \n  // Age factor (prefer middle-aged applicants for stability)\n  if (user.age >= 30 && user.age <= 50) {\n    score += 5;\n  }\n  \n  return Math.max(0, Math.min(100, Math.round(score)));\n}\n\n// STAGE 3: Filter and rank matches\nfor (const user of users) {\n  const userMatches = [];\n  \n  for (const product of products) {\n    // Stage 1: Basic filtering\n    if (!passesBasicCriteria(user, product)) {\n      continue; // Skip this product\n    }\n    \n    // Stage 2: Calculate match score\n    const matchScore = calculateMatchScore(user, product);\n    \n    // Only keep matches with score >= 60\n    if (matchScore >= 60) {\n      userMatches.push({\n        user_id: user.id,\n        user_email: user.email,\n        product_id: product.id,\n        product_name: product.product_name,\n        provider: product.provider,\n        interest_rate: product.interest_rate,\n        match_score: matchScore\n      });\n    }\n  }\n  \n  // Sort by match score (best first) and keep top 5 matches per user\n  userMatches.sort((a, b) => b.match_score - a.match_score);\n  matches.push(...userMatches.slice(0, 5));\n}\n\n// Log statistics\nconsole.log(`Total users: ${users.length}`);\nconsole.log(`Total products: ${products.length}`);\nconsole.log(`Total matches found: ${matches.length}`);\nconsole.log(`Average matches per user: ${(matches.length / users.length).toFixed(2)}`);\n\nreturn matches.map(match => ({ json: match }));"
+      },
+      "id": "matching-engine",
+      "name": "Optimized Matching Engine",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://django:8000/api/match/",
+        "options": {
+          "bodyParametersUi": {
+            "parameter": [
+              {
+                "name": "user_id",
+                "value": "={{ $json.user_id }}"
+              },
+              {
+                "name": "product_id",
+                "value": "={{ $json.product_id }}"
+              },
+              {
+                "name": "match_score",
+                "value": "={{ $json.match_score }}"
+              }
+            ]
+          }
+        },
+        "sendBody": true,
+        "method": "POST",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "user_id",
+              "value": "={{ $json.user_id }}"
+            },
+            {
+              "name": "product_id",
+              "value": "={{ $json.product_id }}"
+            },
+            {
+              "name": "match_score",
+              "value": "={{ $json.match_score }}"
+            }
+          ]
+        }
+      },
+      "id": "save-matches",
+      "name": "Save Matches to DB",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://n8n:5678/webhook/send-notifications",
+        "options": {},
+        "method": "POST"
+      },
+      "id": "trigger-notification",
+      "name": "Trigger Email Workflow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": true, \"matches_created\": $json.total_matches, \"message\": \"Matching completed successfully\" } }}"
+      },
+      "id": "response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1450, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch All Users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch All Users": {
+      "main": [
+        [
+          {
+            "node": "Fetch Loan Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Loan Products": {
+      "main": [
+        [
+          {
+            "node": "Optimized Matching Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Optimized Matching Engine": {
+      "main": [
+        [
+          {
+            "node": "Save Matches to DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Matches to DB": {
+      "main": [
+        [
+          {
+            "node": "Trigger Email Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Email Workflow": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "versionId": "1",
+  "id": "workflow-b-user-matching",
+  "tags": []
+}

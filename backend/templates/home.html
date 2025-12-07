@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Loan Eligibility Engine</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .stat-card h3 {
+            font-size: 2em;
+            margin-bottom: 5px;
+        }
+        
+        .stat-card p {
+            opacity: 0.9;
+        }
+        
+        .upload-section {
+            text-align: center;
+        }
+        
+        .upload-section h2 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        
+        .file-input-wrapper {
+            display: inline-block;
+            position: relative;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+        
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            left: -9999px;
+        }
+        
+        .file-input-label {
+            display: inline-block;
+            padding: 15px 30px;
+            background: #667eea;
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.1em;
+            transition: all 0.3s;
+        }
+        
+        .file-input-label:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .file-name {
+            display: block;
+            margin-top: 10px;
+            color: #666;
+            font-style: italic;
+        }
+        
+        .upload-btn {
+            padding: 15px 40px;
+            background: #764ba2;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 20px;
+        }
+        
+        .upload-btn:hover {
+            background: #663399;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .upload-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .message {
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            display: none;
+        }
+        
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .recent-uploads {
+            margin-top: 30px;
+        }
+        
+        .recent-uploads h3 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        table th {
+            background: #f8f9fa;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        table td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .status {
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.9em;
+            font-weight: 600;
+        }
+        
+        .status.completed {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status.processing {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status.failed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .dashboard-link {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 10px 20px;
+            background: #28a745;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            transition: all 0.3s;
+        }
+        
+        .dashboard-link:hover {
+            background: #218838;
+            transform: translateY(-2px);
+        }
+        
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+            display: none;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏦 Loan Eligibility Engine</h1>
+            <p>Upload user data to discover matching loan products</p>
+        </div>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <h3>{{ total_users }}</h3>
+                <p>Total Users</p>
+            </div>
+            <div class="stat-card">
+                <h3>{{ total_products }}</h3>
+                <p>Loan Products</p>
+            </div>
+            <div class="stat-card">
+                <h3>{{ total_matches }}</h3>
+                <p>Total Matches</p>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="upload-section">
+                <h2>📤 Upload User Data CSV</h2>
+                <p style="color: #666; margin-bottom: 20px;">
+                    CSV should contain: user_id, email, monthly_income, credit_score, employment_status, age
+                </p>
+                
+                <form id="uploadForm" enctype="multipart/form-data">
+                    <div class="file-input-wrapper">
+                        <label class="file-input-label" for="csvFile">
+                            📁 Choose CSV File
+                        </label>
+                        <input type="file" id="csvFile" name="csv_file" accept=".csv" required>
+                    </div>
+                    <span id="fileName" class="file-name">No file chosen</span>
+                    
+                    <br>
+                    <button type="submit" class="upload-btn" id="uploadBtn">
+                        🚀 Upload & Process
+                    </button>
+                </form>
+                
+                <div class="loader" id="loader"></div>
+                <div id="message" class="message"></div>
+                
+                <a href="{% url 'dashboard' %}" class="dashboard-link">📊 View Dashboard</a>
+            </div>
+            
+            <div class="recent-uploads">
+                <h3>Recent Uploads</h3>
+                {% if recent_uploads %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Filename</th>
+                            <th>Uploaded At</th>
+                            <th>Total</th>
+                            <th>Success</th>
+                            <th>Failed</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for upload in recent_uploads %}
+                        <tr>
+                            <td>{{ upload.filename }}</td>
+                            <td>{{ upload.uploaded_at|date:"Y-m-d H:i" }}</td>
+                            <td>{{ upload.total_records }}</td>
+                            <td>{{ upload.successful_records }}</td>
+                            <td>{{ upload.failed_records }}</td>
+                            <td><span class="status {{ upload.status }}">{{ upload.status }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p style="color: #666; text-align: center; padding: 20px;">No uploads yet</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const fileInput = document.getElementById('csvFile');
+        const fileName = document.getElementById('fileName');
+        const uploadForm = document.getElementById('uploadForm');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const message = document.getElementById('message');
+        const loader = document.getElementById('loader');
+        
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                fileName.textContent = e.target.files[0].name;
+            } else {
+                fileName.textContent = 'No file chosen';
+            }
+        });
+        
+        uploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData();
+            formData.append('csv_file', fileInput.files[0]);
+            
+            uploadBtn.disabled = true;
+            loader.style.display = 'block';
+            message.style.display = 'none';
+            
+            try {
+                const response = await fetch('/upload/', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                loader.style.display = 'none';
+                message.style.display = 'block';
+                
+                if (response.ok && data.success) {
+                    message.className = 'message success';
+                    message.innerHTML = `
+                        <strong>✅ Success!</strong><br>
+                        ${data.message}<br>
+                        Processed: ${data.successful} records<br>
+                        Failed: ${data.failed} records
+                    `;
+                    uploadForm.reset();
+                    fileName.textContent = 'No file chosen';
+                    
+                    // Reload page after 2 seconds to show updated stats
+                    setTimeout(() => location.reload(), 2000);
+                } else {
+                    message.className = 'message error';
+                    message.innerHTML = `<strong>❌ Error:</strong> ${data.error || 'Upload failed'}`;
+                }
+            } catch (error) {
+                loader.style.display = 'none';
+                message.style.display = 'block';
+                message.className = 'message error';
+                message.innerHTML = `<strong>❌ Error:</strong> ${error.message}`;
+            } finally {
+                uploadBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

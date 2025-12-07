@@ -1,0 +1,128 @@
+{
+  "name": "Workflow A - Loan Product Discovery",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://www.bankrate.com/loans/personal-loans/",
+        "options": {}
+      },
+      "id": "fetch-bankrate",
+      "name": "Fetch Bankrate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [450, 200]
+    },
+    {
+      "parameters": {
+        "url": "https://www.nerdwallet.com/best/loans/personal-loans",
+        "options": {}
+      },
+      "id": "fetch-nerdwallet",
+      "name": "Fetch NerdWallet",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [450, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse HTML and extract loan product information\nconst items = [];\n\nfor (const item of $input.all()) {\n  const html = item.json.data || item.json.body;\n  const source = item.json.url;\n  \n  // Simple parsing logic - in production, use proper HTML parser\n  // This is a simplified example\n  \n  if (source.includes('bankrate')) {\n    // Parse Bankrate products\n    items.push({\n      product_name: 'Bankrate Personal Loan - Standard',\n      provider: 'Various Banks',\n      interest_rate: 8.99,\n      min_income: 30000,\n      min_credit_score: 650,\n      max_credit_score: 850,\n      min_age: 21,\n      max_age: 65,\n      employment_required: 'Full-time',\n      product_url: source\n    });\n    \n    items.push({\n      product_name: 'Bankrate Personal Loan - Premium',\n      provider: 'Various Banks',\n      interest_rate: 6.99,\n      min_income: 50000,\n      min_credit_score: 720,\n      max_credit_score: 850,\n      min_age: 25,\n      max_age: 60,\n      employment_required: 'Full-time',\n      product_url: source\n    });\n  }\n  \n  if (source.includes('nerdwallet')) {\n    // Parse NerdWallet products\n    items.push({\n      product_name: 'NerdWallet Best Rate Loan',\n      provider: 'Top Lenders',\n      interest_rate: 7.49,\n      min_income: 35000,\n      min_credit_score: 680,\n      max_credit_score: 850,\n      min_age: 21,\n      max_age: 65,\n      employment_required: 'Full-time,Part-time',\n      product_url: source\n    });\n    \n    items.push({\n      product_name: 'Quick Approval Personal Loan',\n      provider: 'Fast Finance',\n      interest_rate: 9.99,\n      min_income: 25000,\n      min_credit_score: 620,\n      max_credit_score: 850,\n      min_age: 21,\n      max_age: 70,\n      employment_required: 'Full-time,Part-time,Self-employed',\n      product_url: source\n    });\n  }\n}\n\n// Add some mock products for demonstration\nitems.push(\n  {\n    product_name: 'Low Interest Home Loan',\n    provider: 'HomeBank',\n    interest_rate: 5.99,\n    min_income: 60000,\n    min_credit_score: 740,\n    max_credit_score: 850,\n    min_age: 25,\n    max_age: 60,\n    employment_required: 'Full-time',\n    product_url: 'https://example.com/homebank'\n  },\n  {\n    product_name: 'Flexible Personal Loan',\n    provider: 'FlexCredit',\n    interest_rate: 11.49,\n    min_income: 20000,\n    min_credit_score: 600,\n    max_credit_score: 850,\n    min_age: 21,\n    max_age: 65,\n    employment_required: 'Any',\n    product_url: 'https://example.com/flexcredit'\n  },\n  {\n    product_name: 'Premium Plus Loan',\n    provider: 'EliteBank',\n    interest_rate: 4.99,\n    min_income: 80000,\n    min_credit_score: 780,\n    max_credit_score: 850,\n    min_age: 30,\n    max_age: 55,\n    employment_required: 'Full-time',\n    product_url: 'https://example.com/elitebank'\n  }\n);\n\nreturn items.map(item => ({ json: item }));"
+      },
+      "id": "parse-products",
+      "name": "Parse Loan Products",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO loan_products (product_name, provider, interest_rate, min_income, min_credit_score, max_credit_score, min_age, max_age, employment_required, product_url, created_at, updated_at)\nVALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())\nON CONFLICT (product_name, provider) \nDO UPDATE SET \n  interest_rate = EXCLUDED.interest_rate,\n  min_income = EXCLUDED.min_income,\n  min_credit_score = EXCLUDED.min_credit_score,\n  updated_at = NOW();",
+        "options": {}
+      },
+      "id": "save-to-db",
+      "name": "Save to PostgreSQL",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [850, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PostgreSQL account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Bankrate",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch NerdWallet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Bankrate": {
+      "main": [
+        [
+          {
+            "node": "Parse Loan Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch NerdWallet": {
+      "main": [
+        [
+          {
+            "node": "Parse Loan Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Loan Products": {
+      "main": [
+        [
+          {
+            "node": "Save to PostgreSQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "versionId": "1",
+  "id": "workflow-a-loan-discovery",
+  "tags": []
+}

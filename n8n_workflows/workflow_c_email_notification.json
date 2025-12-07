@@ -1,0 +1,181 @@
+{
+  "name": "Workflow C - Email Notification",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "send-notifications",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "send-notifications"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  ulm.id as match_id,\n  up.user_id,\n  up.email,\n  up.monthly_income,\n  up.credit_score,\n  lp.product_name,\n  lp.provider,\n  lp.interest_rate,\n  lp.product_url,\n  ulm.match_score\nFROM user_loan_matches ulm\nJOIN user_profiles up ON ulm.user_id = up.id\nJOIN loan_products lp ON ulm.loan_product_id = lp.id\nWHERE ulm.notified = false\nORDER BY up.email, ulm.match_score DESC;",
+        "options": {}
+      },
+      "id": "fetch-unnotified",
+      "name": "Fetch Unnotified Matches",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PostgreSQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Group matches by user email\nconst matchesByUser = {};\n\nfor (const item of $input.all()) {\n  const email = item.json.email;\n  \n  if (!matchesByUser[email]) {\n    matchesByUser[email] = {\n      user_id: item.json.user_id,\n      email: email,\n      monthly_income: item.json.monthly_income,\n      credit_score: item.json.credit_score,\n      matches: [],\n      match_ids: []\n    };\n  }\n  \n  matchesByUser[email].matches.push({\n    product_name: item.json.product_name,\n    provider: item.json.provider,\n    interest_rate: item.json.interest_rate,\n    product_url: item.json.product_url || '#',\n    match_score: item.json.match_score\n  });\n  \n  matchesByUser[email].match_ids.push(item.json.match_id);\n}\n\n// Convert to array\nconst groupedUsers = Object.values(matchesByUser);\n\nconsole.log(`Grouped ${$input.all().length} matches into ${groupedUsers.length} users`);\n\nreturn groupedUsers.map(user => ({ json: user }));"
+      },
+      "id": "group-by-user",
+      "name": "Group Matches by User",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Create personalized email HTML for each user\nconst user = $input.first().json;\n\n// Build product list HTML\nlet productsHtml = '';\nuser.matches.forEach((match, index) => {\n  productsHtml += `\n    <div style=\"background: #f8f9fa; padding: 20px; margin-bottom: 15px; border-radius: 8px; border-left: 4px solid #667eea;\">\n      <h3 style=\"color: #333; margin: 0 0 10px 0;\">${index + 1}. ${match.product_name}</h3>\n      <p style=\"margin: 5px 0; color: #666;\">\n        <strong>Provider:</strong> ${match.provider}<br>\n        <strong>Interest Rate:</strong> <span style=\"color: #28a745; font-size: 1.2em;\">${match.interest_rate}%</span><br>\n        <strong>Match Score:</strong> <span style=\"color: #667eea; font-weight: bold;\">${match.match_score}%</span>\n      </p>\n      ${match.product_url !== '#' ? `<a href=\"${match.product_url}\" style=\"color: #667eea; text-decoration: none;\">Learn More →</a>` : ''}\n    </div>\n  `;\n});\n\nconst emailHtml = `\n<!DOCTYPE html>\n<html>\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n</head>\n<body style=\"font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;\">\n  <div style=\"background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 10px; text-align: center; margin-bottom: 30px;\">\n    <h1 style=\"margin: 0 0 10px 0; font-size: 2em;\">🎉 Great News!</h1>\n    <p style=\"margin: 0; font-size: 1.1em; opacity: 0.95;\">We found ${user.matches.length} loan product${user.matches.length > 1 ? 's' : ''} that match your profile</p>\n  </div>\n  \n  <div style=\"margin-bottom: 30px;\">\n    <h2 style=\"color: #333; border-bottom: 2px solid #667eea; padding-bottom: 10px;\">Hello ${user.user_id}!</h2>\n    <p style=\"color: #666; font-size: 1.05em;\">\n      Based on your profile (Monthly Income: <strong>$${user.monthly_income}</strong>, Credit Score: <strong>${user.credit_score}</strong>),\n      we've identified the following personal loan products that you're eligible for:\n    </p>\n  </div>\n  \n  <div style=\"margin-bottom: 30px;\">\n    <h2 style=\"color: #333; margin-bottom: 15px;\">📋 Your Matched Loan Products:</h2>\n    ${productsHtml}\n  </div>\n  \n  <div style=\"background: #e7f3ff; padding: 20px; border-radius: 8px; margin-bottom: 20px;\">\n    <h3 style=\"color: #0056b3; margin: 0 0 10px 0;\">💡 What's Next?</h3>\n    <ol style=\"margin: 0; padding-left: 20px; color: #666;\">\n      <li>Review each loan product carefully</li>\n      <li>Compare interest rates and terms</li>\n      <li>Click on the links to learn more or apply</li>\n      <li>Contact the providers directly for personalized quotes</li>\n    </ol>\n  </div>\n  \n  <div style=\"text-align: center; padding: 20px; color: #999; font-size: 0.9em; border-top: 2px solid #eee;\">\n    <p style=\"margin: 5px 0;\">This is an automated notification from the Loan Eligibility Engine</p>\n    <p style=\"margin: 5px 0;\">Please do not reply to this email</p>\n  </div>\n</body>\n</html>\n`;\n\nreturn [{\n  json: {\n    to: user.email,\n    subject: `🎯 ${user.matches.length} Loan Product${user.matches.length > 1 ? 's' : ''} Matched to Your Profile!`,\n    html: emailHtml,\n    match_ids: user.match_ids\n  }\n}];"
+      },
+      "id": "create-email",
+      "name": "Create Personalized Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "noreply@loanengine.com",
+        "toEmail": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.html }}",
+        "options": {}
+      },
+      "id": "send-email",
+      "name": "Send Email (SMTP)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1050, 300],
+      "credentials": {
+        "smtp": {
+          "id": "2",
+          "name": "SMTP account"
+        }
+      },
+      "notes": "Configure SMTP credentials in n8n:\n- Gmail: smtp.gmail.com:587\n- Use App Password for Gmail\n- Or use any SMTP service"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE user_loan_matches \nSET notified = true, notified_at = NOW() \nWHERE id = ANY({{ $json.match_ids }});",
+        "options": {}
+      },
+      "id": "update-notified",
+      "name": "Mark as Notified",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1250, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PostgreSQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": true, \"emails_sent\": $itemIndex + 1, \"message\": \"Notifications sent successfully\" } }}"
+      },
+      "id": "response",
+      "name": "Send Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1450, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Unnotified Matches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Unnotified Matches": {
+      "main": [
+        [
+          {
+            "node": "Group Matches by User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Group Matches by User": {
+      "main": [
+        [
+          {
+            "node": "Create Personalized Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Personalized Email": {
+      "main": [
+        [
+          {
+            "node": "Send Email (SMTP)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email (SMTP)": {
+      "main": [
+        [
+          {
+            "node": "Mark as Notified",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark as Notified": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "versionId": "1",
+  "id": "workflow-c-email-notification",
+  "tags": []
+}
